@@ -8,9 +8,11 @@ export class ProjectParser {
   private initialized = false;
   private initEvent = new LiteEvent();
   constructor(public subscriptions: CompositeDisposable) {
-    this.initialize().then(() => {
-      this.initEvent.trigger();
-    });
+    setTimeout(() => {
+      this.initialize().then(() => {
+        this.initEvent.trigger();
+      });
+    }, 1000);
   }
   private async parseDirectory (directory: Directory): Promise<File[]> {
     const files = [];
@@ -198,6 +200,7 @@ export class OFileCache {
     if (matchReference) {
       this.package.referencePackage = matchReference[2];
     }
+    // console.log(this.package);
 
   }
   private parseEntity(file: File): void {
