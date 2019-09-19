@@ -1,13 +1,13 @@
-import { OFile, OIf, OForLoop, OSignalLike, OSignal, OArchitecture, OEntity, OPort, OInstantiation, OWrite, ORead } from './parser/objects';
-import { Range, Point, TextEditor, CompositeDisposable } from 'atom';
+import { OFile, OIf, OSignalLike, OSignal, OArchitecture, OEntity, OPort, OInstantiation, OWrite, ORead } from './parser/objects';
+import { Range, Point } from 'atom';
 import { Parser } from './parser/parser';
-import { ProjectParser, OProjectEntity } from './project-parser';
+import { ProjectParser, OProjectEntity, OThing } from './project-parser';
 
 export class VhdlLinter {
   messages: Message[] = [];
   tree: OFile;
   parser: Parser;
-  packageThings: string[] = [];
+  packageThings: OThing[] = [];
   constructor(private editorPath: string, private text: string, public projectParser: ProjectParser) {
 //     console.log('lint');
     this.parser = new Parser(this.text, this.editorPath);

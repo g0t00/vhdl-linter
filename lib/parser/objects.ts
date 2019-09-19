@@ -1,4 +1,4 @@
-import {OProjectEntity} from '../project-parser';
+import {OProjectEntity, OThing} from '../project-parser';
 export class ObjectBase {
   public startI: number;
   constructor (public parent: ObjectBase|OFile, startI: number) {
@@ -96,14 +96,16 @@ export class OArchitecture extends ObjectBase {
     }
     return found;
   }
-  isValidRead(read: ORead, packageThings: string[]): boolean {
+  isValidRead(read: ORead, packageThings: OThing[]): boolean {
     return this.findRead(read, packageThings) !== false;
   }
-  findRead(read: ORead, packageThings: string[]) {
-    let found: OSignal|OFunction|boolean|OForLoop|OForGenerate = false;
+  findRead(read: ORead, packageThings: OThing[]) {
+    let found: OSignal|OFunction|false|OThing|OForLoop|OForGenerate = false;
 
-    if (packageThings.find(packageThing => packageThing.toLowerCase() === read.text.toLowerCase())) {
-      found = true;
+    const packageThing = packageThings.find(packageThing => packageThing.name.toLowerCase() === read.text.toLowerCase());
+    if (packageThing) {
+      found = packageThing;
+      return found;
     }
     let parent = read.parent;
     let counter = 100;

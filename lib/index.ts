@@ -1,8 +1,8 @@
-import { TextEditor, CompositeDisposable } from 'atom';
+import { TextEditor, CompositeDisposable, Point } from 'atom';
 import { VhdlLinter, Message } from './vhdl-linter';
 import { ORead, OWrite } from './parser/objects';
 import { Parser } from './parser/parser';
-import { ProjectParser, OProjectEntity } from './project-parser';
+import { ProjectParser, OProjectEntity, OThing, OPackage } from './project-parser';
 import { browser } from './viewer/browser';
 
 module.exports = {
@@ -72,7 +72,7 @@ module.exports = {
           const linter = module.exports.vhdlLinters[textEditor.getPath() || ''] as VhdlLinter;
 //          console.log('linter', linter);
           let result: any;
-          try {
+          // try {
             const startIRegex = new RegExp(`^(.*\n){${range.start.row}}.{${range.start.column}}`, 'g');
             const match2 = textEditor.getText().match(startIRegex);
             if (!match2) {
@@ -80,21 +80,23 @@ module.exports = {
               return;
             }
             const startI = match2[0].length;
-            const read = linter.tree.objectList.find(obj => {
+            const foundThing = linter.tree.objectList.find(obj => {
               if (obj instanceof ORead || obj instanceof OWrite) {
                 return obj.begin === startI;
               } else {
                 return false;
               }
             });
-            if (!read || !(read instanceof ORead || read instanceof OWrite)) {
-//              console.log('read not read', read, startI);
+            if (!foundThing || !(foundThing instanceof ORead || foundThing instanceof OWrite)) {
+//              console.log('foundThing not foundThing', foundThing, startI);
               return;
             }
-            result = linter.tree.architecture.findRead(read, []);
-          } catch (e) {
-//            console.log(e);
-          }
+            const packageThings: OThing[] = [];
+            module.exports.projectParser.packages.forEach((pkg: OPackage) => packageThings.push(... pkg.things));
+            result = linter.tree.architecture.findRead(foundThing, packageThings);
+//           } catch (e) {
+// //            console.log(e);
+//           }
 //          console.log('reads', result);
           if (typeof result === 'boolean') {
             return;
@@ -107,9 +109,31 @@ module.exports = {
               if (!editor) {
                 return;
               }
-              let pos = linter.getPositionFromI(result.startI);
-              editor.setCursorBufferPosition(pos, {autoscroll: false});
-              editor.scrollToCursorPosition({center: true});
+              if (result instanceof OThing) {
+                atom.workspace.open(result.parent.path).then(() => {
+                  const editor = atom.workspace.getActiveTextEditor();
+                  if (!editor) {
+                    return;
+                  }
+                  let row = 0;
+                  let col = 0;
+                  const text = editor.getText();
+                  for (let count = 0; count < result.startI; count++) {
+                    if (text[count] === '\n') {
+                      row++;
+                      col = 0;
+                    } else {
+                      col++;
+                    }
+                  }
+                  editor.setCursorBufferPosition(new Point(row, col), {autoscroll: false});
+                  editor.scrollToCursorPosition({center: true});
+                });
+              } else {
+                let pos = linter.getPositionFromI(result.startI);
+                editor.setCursorBufferPosition(pos, {autoscroll: false});
+                editor.scrollToCursorPosition({center: true});
+              }
               // atom.workspace.open(entities[0].file.getPath());
             },
           };

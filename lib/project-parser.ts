@@ -1,6 +1,5 @@
 import { Directory, File, CompositeDisposable } from 'atom';
 import { LiteEvent } from 'lite-event';
-import {promisify} from 'util';
 
 export class ProjectParser {
   private cachedFiles: OFileCache[] = [];
@@ -128,9 +127,12 @@ export class ProjectParser {
   }
 }
 export class OPackage {
-  name: string;
-  things: string[] = [];
+  constructor (public path: string, public name: string) {}
+  things: OThing[] = [];
   referencePackage?: string;
+}
+export class OThing {
+  constructor (public parent: OPackage, public name: string, public startI: number) {}
 }
 export class OProjectPorts {
   name: string;
@@ -166,26 +168,31 @@ export class OFileCache {
     if (!match) {
       return;
     }
-    this.package = new OPackage();
-    this.package.name = match[1];
+    this.package = new OPackage(this.path, match[1]);
     // console.log(  this.package.name, 'parsing package');
 
     let re = /constant\s+(\w+)/g;
-    let m;
+    let m: RegExpExecArray|null;
     while (m = re.exec(this.text)) {
-      this.package.things.push(m[1]);
+      this.package.things.push(new OThing(this.package, m[1], m.index));
     }
     re = /function\s+(\w+)/g;
     while (m = re.exec(this.text)) {
-      this.package.things.push(m[1]);
+      this.package.things.push(new OThing(this.package, m[1], m.index));
     }
     re = /(?:subtype|type)\s+(\w+)/g;
     while (m = re.exec(this.text)) {
-      this.package.things.push(m[1]);
+      this.package.things.push(new OThing(this.package, m[1], m.index));
     }
     re = /type\s+(\w+)\s+is\s*\(([^)]*)\)\s*;/g;
     while (m = re.exec(this.text)) {
-      this.package.things.push(... m[2].split(',').map(thing => thing.trim()));
+      let j = m.index;
+      const pkg = this.package;
+      this.package.things.push(... m[2].split(',').map(thing => {
+        const thing2 = new OThing(pkg, thing.trim(), j);
+        j += 1 + thing.length;
+        return thing2;
+      }));
     }
     const matchReference = this.text.match(/is\s+new\s+(\w+).(\w+)/i);
     if (matchReference) {
