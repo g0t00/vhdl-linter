@@ -1,17 +1,23 @@
 import { ParserBase } from './parser-base';
-import { OSignal, OType, OArchitecture, OEntity, ParserError, OState, OFunction, OPackage, ORecord, OEnum, ORead, OI, ORecordChild, OName } from './objects';
+import { OSignal, OType, OArchitecture, OEntity, ParserError, OState, OFunction, OPackage, ORecord, OEnum, ORead, OI, ORecordChild, OName, OProcedure } from './objects';
 import { SubtypeParser } from './subtype-parser';
+import { StatementParser, StatementTypes } from './statement-parser';
+import { ProcedureParser } from './procedure-parser';
 
 export class DeclarativePartParser extends ParserBase {
   type: string;
-  constructor(text: string, pos: OI, file: string, private parent: OArchitecture|OEntity|OPackage) {
+  constructor(text: string, pos: OI, file: string, private parent: OArchitecture | OEntity | OPackage) {
     super(text, pos, file);
     this.debug('start');
   }
   parse(optional: boolean = false, lastWord = 'begin') {
     let nextWord = this.getNextWord({ consume: false }).toLowerCase();
     while (nextWord !== lastWord) {
-      if (nextWord === 'signal' || nextWord === 'constant') {
+      if (nextWord === 'signal' || nextWord === 'constant' || nextWord === 'shared' || nextWord === 'variable') {
+        if (nextWord === 'shared') {
+          this.getNextWord();
+          // this.expect('variable');
+        }
         const signals = [];
         const constant = this.getNextWord() === 'constant';
         do {
@@ -133,11 +139,15 @@ export class DeclarativePartParser extends ParserBase {
       } else if (nextWord === 'component') {
         this.getNextWord();
         const componentName = this.getNextWord();
-        this.advancePast(/\bend\b/i, {allowSemicolon: true});
+        this.advancePast(/\bend\b/i, { allowSemicolon: true });
         this.maybeWord('component');
         this.maybeWord(componentName);
         this.expect(';');
-      } else if (nextWord === 'impure' || nextWord === 'function' || nextWord === 'procedure') {
+      } else if (nextWord === 'procedure') {
+        this.getNextWord();
+        const procedureParser = new ProcedureParser(this.text, this.pos, this.file, this.parent);
+        this.parent.functions.push(procedureParser.parse(this.pos.i));
+      } else if (nextWord === 'impure' || nextWord === 'function') {
         if (nextWord === 'impure') {
           this.getNextWord();
         }

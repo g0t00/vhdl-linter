@@ -9,7 +9,7 @@ export async function documentHighlightHandler(params: TextDocumentPositionParam
         return null;
     }
     let startI = linter.getIFromPosition(params.position);
-    const candidates = linter.tree.objectList.filter(object => object.range.start.i <= startI && startI <= object.range.end.i);
+    const candidates = linter.tree?.objectList.filter(object => object.range.start.i <= startI && startI <= object.range.end.i) ?? [];
     candidates.sort((a, b) => (a.range.end.i - a.range.start.i) - (b.range.end.i - b.range.start.i));
     const candidate = candidates[0];
     if (!candidate || !(candidate instanceof OToken)) {

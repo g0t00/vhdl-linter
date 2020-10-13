@@ -1,28 +1,36 @@
 import { ParserBase } from './parser-base';
 import { AssignmentParser } from './assignment-parser';
 
-import { OProcess, OStatement, OForLoop, OIf, OIfClause, OCase, OWhenClause, OVariable, ORead, ObjectBase, OI, OElseClause, OName } from './objects';
+import { OProcess, OStatement, OForLoop, OIf, OIfClause, OCase, OWhenClause, OVariable, ORead, ObjectBase, OI, OElseClause, OName, OProcedure, OWhileLoop } from './objects';
 import { tokenizer } from './tokenizer';
 
-export class ProcessParser extends ParserBase {
+export class ProcedureParser extends ParserBase {
   constructor(text: string, pos: OI, file: string, private parent: ObjectBase) {
     super(text, pos, file);
     this.debug(`start`);
 
   }
-  parse(startI: number, label?: string): OProcess {
-    const process = new OProcess(this.parent, startI, this.getEndOfLineI());
+  parse(startI: number, label?: string): OProcedure {
+    const beforeNameI = this.pos.i;
+    const name = this.getNextWord();
+    const procedure = new OProcedure(this.parent, startI, this.getEndOfLineI());
+    procedure.name = new OName(procedure, beforeNameI, beforeNameI + name.length);
+    procedure.name.text = name;
+    console.log(`start procedure ${name} ${new OI(this.parent, this.pos.i).line}`);
+
     if (this.text[this.pos.i] === '(') {
       this.expect('(');
-      process.label = label;
-      process.sensitivityList = this.advanceBrace();
+      procedure.parameter = this.advanceBrace();
+    } else {
+      procedure.parameter = '';
     }
     this.maybeWord('is');
+    // debugger;
     let nextWord = this.getNextWord({ consume: false }).toLowerCase();
     while (nextWord !== 'begin') {
-      const variable = new OVariable(process, this.pos.i, this.getEndOfLineI());
+      const variable = new OVariable(procedure, this.pos.i, this.getEndOfLineI());
       variable.constant = false;
-      this.expect(['variable', 'file', 'alias']);
+      this.expect('variable');
       const startI = this.pos.i;
       const name = this.getNextWord();
       variable.name = new OName(variable, startI, startI + name.length);
@@ -46,20 +54,20 @@ export class ProcessParser extends ParserBase {
       //   multiSignal.name = multiSignalName;
       //   process.variables.push(multiSignal);
       // }
-      process.variables.push(variable);
+      procedure.variables.push(variable);
       multiSignals = [];
       nextWord = this.getNextWord({ consume: false }).toLowerCase();
     }
     this.expect('begin');
-    process.statements = this.parseStatements(process, ['end']);
+    procedure.statements = this.parseStatements(procedure, ['end']);
     this.expect('end');
-    this.expect('process');
-    if (label) {
-      this.maybeWord(label);
-    }
-    process.range.end.i = this.pos.i;
+    this.expect('procedure');
+    this.maybeWord(name);
+    procedure.range.end.i = this.pos.i;
     this.expect(';');
-    return process;
+    console.log(`quit procedure ${name} ${new OI(this.parent, this.pos.i).line}`);
+
+    return procedure;
   }
   parseStatements(parent: ObjectBase, exitConditions: string[]): OStatement[] {
     const statements = [];
@@ -89,12 +97,32 @@ export class ProcessParser extends ParserBase {
         this.advancePast(';');
       } else if (nextWord.toLowerCase() === 'exit') {
         this.advancePast(';');
+      } else if (nextWord.toLowerCase() === 'while') {
+        statements.push(this.parseWhile(parent, label));
+      } else if (this.text.substr(this.pos.i).match(/^\w+\s*\([^<]*;/)) {
+        this.advanceSemicolon(true);
       } else {
         const assignmentParser = new AssignmentParser(this.text, this.pos, this.file, parent);
         statements.push(assignmentParser.parse());
       }
     }
     return statements;
+  }
+  parseWhile(parent: ObjectBase, label?: string): OWhileLoop {
+    const whileLoop = new OWhileLoop(parent, this.pos.i, this.getEndOfLineI());
+    this.expect('while');
+    const startI = this.pos.i;
+    const position = this.pos.i;
+    const condition = this.advancePast('loop');
+    whileLoop.conditionReads = this.extractReads(whileLoop, condition, position);
+    whileLoop.statements = this.parseStatements(whileLoop, ['end']);
+    this.expect('end');
+    this.expect('loop');
+    if (label) {
+      this.maybeWord(label);
+    }
+    this.expect(';');
+    return whileLoop;
   }
   parseFor(parent: ObjectBase, label?: string): OForLoop {
     const forLoop = new OForLoop(parent, this.pos.i, this.getEndOfLineI());
@@ -126,6 +154,7 @@ export class ProcessParser extends ParserBase {
     this.expect('if');
     const position = this.pos.i;
     clause.condition = this.advancePast('then');
+    console.log(`start if ${clause.condition} ${new OI(this.parent, this.pos.i).line}`);
     clause.conditionReads = this.extractReads(clause, clause.condition, position);
     clause.statements = this.parseStatements(clause, ['else', 'elsif', 'end']);
     clause.range.setEndBacktraceWhitespace(this.pos.i);
@@ -156,6 +185,8 @@ export class ProcessParser extends ParserBase {
       this.maybeWord(label);
     }
     this.expect(';');
+    console.log(`quit if ${clause.condition} ${new OI(this.parent, this.pos.i).line}`);
+
     return if_;
   }
   parseCase(parent: ObjectBase, label?: string): OCase {
