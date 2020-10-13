@@ -1,7 +1,7 @@
 import { ParserBase } from './parser-base';
 import { AssignmentParser } from './assignment-parser';
 
-import { OProcess, OStatement, OForLoop, OIf, OIfClause, OCase, OWhenClause, OVariable, ORead, ObjectBase, OI, OElseClause, OName } from './objects';
+import { OProcess, OStatement, OForLoop, OIf, OIfClause, OCase, OWhenClause, OVariable, ORead, ObjectBase, OI, OElseClause, OName, OWhileLoop } from './objects';
 import { tokenizer } from './tokenizer';
 
 export class ProcessParser extends ParserBase {
@@ -22,6 +22,7 @@ export class ProcessParser extends ParserBase {
     while (nextWord !== 'begin') {
       const variable = new OVariable(process, this.pos.i, this.getEndOfLineI());
       variable.constant = false;
+      const alias = this.getNextWord({ consume: false }).toLowerCase() === 'alias';
       this.expect(['variable', 'file', 'alias']);
       const startI = this.pos.i;
       const name = this.getNextWord();
@@ -34,19 +35,24 @@ export class ProcessParser extends ParserBase {
 
         continue;
       }
-      this.expect(':');
-      const startType = this.pos.i;
-      const { typeReads, defaultValueReads } = this.getType(variable);
-      variable.type = typeReads;
-      variable.defaultValue = defaultValueReads;
+      if (alias) {
+        this.advanceSemicolon(true);
+      } else {
+        this.expect(':');
+        const startType = this.pos.i;
+        const { typeReads, defaultValueReads } = this.getType(variable);
+        variable.type = typeReads;
+        variable.defaultValue = defaultValueReads;
 
-      // for (const multiSignalName of multiSignals) {
-      //   const multiSignal = new OVariable(process, -1, -1);
-      //   Object.assign(variable, multiSignal);
-      //   multiSignal.name = multiSignalName;
-      //   process.variables.push(multiSignal);
-      // }
-      process.variables.push(variable);
+        // for (const multiSignalName of multiSignals) {
+        //   const multiSignal = new OVariable(process, -1, -1);
+        //   Object.assign(variable, multiSignal);
+        //   multiSignal.name = multiSignalName;
+        //   process.variables.push(multiSignal);
+        // }
+        process.variables.push(variable);
+
+      }
       multiSignals = [];
       nextWord = this.getNextWord({ consume: false }).toLowerCase();
     }
@@ -72,6 +78,7 @@ export class ProcessParser extends ParserBase {
         this.expect(':');
         nextWord = this.getNextWord({ consume: false });
       }
+      const statementText = this.advanceSemicolon(true, { consume: false });
       if (nextWord.toLowerCase() === 'if') {
         statements.push(this.parseIf(parent, label));
       } else if (exitConditions.indexOf(nextWord.toLowerCase()) > -1) {
@@ -87,11 +94,15 @@ export class ProcessParser extends ParserBase {
         this.advancePast(';');
       } else if (nextWord.toLowerCase() === 'wait') {
         this.advancePast(';');
+      } else if (nextWord.toLowerCase() === 'while') {
+        statements.push(this.parseWhile(parent, label));
       } else if (nextWord.toLowerCase() === 'exit') {
         this.advancePast(';');
-      } else {
+      } else if (statementText.match(/:=|<=/)) {
         const assignmentParser = new AssignmentParser(this.text, this.pos, this.file, parent);
         statements.push(assignmentParser.parse());
+      } else {
+        this.advanceSemicolon(true);
       }
     }
     return statements;
@@ -117,6 +128,22 @@ export class ProcessParser extends ParserBase {
     }
     this.expect(';');
     return forLoop;
+  }
+  parseWhile(parent: ObjectBase, label?: string): OWhileLoop {
+    const whileLoop = new OWhileLoop(parent, this.pos.i, this.getEndOfLineI());
+    this.expect('while');
+    const startI = this.pos.i;
+    const position = this.pos.i;
+    const condition = this.advancePast('loop');
+    whileLoop.conditionReads = this.extractReads(whileLoop, condition, position);
+    whileLoop.statements = this.parseStatements(whileLoop, ['end']);
+    this.expect('end');
+    this.expect('loop');
+    if (label) {
+      this.maybeWord(label);
+    }
+    this.expect(';');
+    return whileLoop;
   }
   parseIf(parent: ObjectBase, label?: string): OIf {
     this.debug(`parseIf`);

@@ -125,17 +125,18 @@ export class ParserBase {
     }
     throw new ParserError(`could not find closing brace`, new OI(this.pos.parent, this.pos.i - text.length).getRangeToEndLine());
   }
-  advanceSemicolon(braceAware: boolean = false) {
+  advanceSemicolon(braceAware: boolean = false, {consume} = {consume: true}) {
     if (braceAware) {
+      let offset = 0;
       let text = '';
       let braceLevel = 0;
       let quote = false;
-      while (this.text[this.pos.i]) {
-        const match = /["\\();]/.exec(this.text.substring(this.pos.i));
+      while (this.text[this.pos.i + offset]) {
+        const match = /["\\();]/.exec(this.text.substring(this.pos.i + offset));
         if (!match) {
-          throw new ParserError(`could not find closing brace`, new OI(this.pos.parent, this.pos.i - text.length).getRangeToEndLine());
+          throw new ParserError(`could not find closing brace`, new OI(this.pos.parent, this.pos.i + offset - text.length).getRangeToEndLine());
         }
-        if (match[0] === '"' && this.text[this.pos.i + match.index - 1] !== '\\') {
+        if (match[0] === '"' && this.text[this.pos.i + offset + match.index - 1] !== '\\') {
           quote = !quote;
         } else if (match[0] === '(' && !quote) {
           braceLevel++;
@@ -146,23 +147,28 @@ export class ParserBase {
             throw new ParserError(`unexpected ')'`, new OI(this.pos.parent, this.pos.i - text.length).getRangeToEndLine());
           }
         } else if (match[0] === ';' && !quote && braceLevel === 0) {
-          text += this.text.substring(this.pos.i, this.pos.i + match.index);
-          this.pos.i += match.index + 1;
-          this.advanceWhitespace();
+          text += this.text.substring(this.pos.i + offset, this.pos.i + offset + match.index);
+          offset += match.index + 1;
+          if (consume) {
+            this.pos.i += offset;
+            this.advanceWhitespace();
+          }
           return text.trim();
         }
-        text += this.text.substring(this.pos.i, this.pos.i + match.index);
-        this.pos.i += match.index + 1;
+        text += this.text.substring(this.pos.i + offset, this.pos.i + offset + match.index);
+        offset += match.index + 1;
       }
-      throw new ParserError(`could not find closing brace`, new OI(this.pos.parent, this.pos.i - text.length).getRangeToEndLine());
+      throw new ParserError(`could not find closing brace`, new OI(this.pos.parent, this.pos.i + offset - text.length).getRangeToEndLine());
     }
     const match = /;/.exec(this.text.substring(this.pos.i));
     if (!match) {
       throw new ParserError(`could not find semicolon`, this.pos.getRangeToEndLine());
     }
     const text = this.text.substring(this.pos.i, this.pos.i + match.index);
-    this.pos.i += match.index + 1;
-    this.advanceWhitespace();
+    if (consume) {
+      this.pos.i += match.index + 1;
+      this.advanceWhitespace();
+    }
     return text;
   }
   test(re: RegExp) {
