@@ -3,6 +3,7 @@ import { OEntity, OFileWithEntity, OPackage, OFileWithPackage } from './parser/o
 import { VhdlLinter } from './vhdl-linter';
 import { watch, FSWatcher } from 'chokidar';
 import { EventEmitter } from 'events';
+import { join, resolve } from 'path';
 
 export class ProjectParser {
 
@@ -20,13 +21,16 @@ export class ProjectParser {
     // for (const directory of this.workspaces) {
     //   this.parseDirectory(directory).forEach(file => files.add(realpathSync(file)));
     // }
+    debugger;
     const pkg = __dirname;
+    console.log(pkg);
     if (pkg) {
       //       console.log(pkg, new Directory(pkg + '/ieee2008'));
-      (await this.parseDirectory((pkg + '/../../ieee2008'))).forEach(file => files.add(file));
-      files.add(pkg + '/../../standard.vhdl');
-      files.add(pkg + '/../../textio.vhdl');
+      (await this.parseDirectory(join(pkg, '/../../ieee2008'))).forEach(file => files.add(file));
+      files.add(join(pkg, '/../../standard.vhdl'));
+      files.add(join(pkg, '/../../textio.vhdl'));
     }
+    console.log(files);
     for (const file of files) {
       let cachedFile = new OFileCache(file, this);
       this.cachedFiles.push(cachedFile);
