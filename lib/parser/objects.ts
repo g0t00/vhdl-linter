@@ -190,6 +190,11 @@ export class OFunction extends OMentionable {
   // name: string;
   parameter: string;
 }
+export class OProcedure extends OFunction {
+  variables: OVariable[] = [];
+  statements: OStatement[] = [];
+
+}
 export class OArchitecture extends ObjectBase {
   signals: OSignal[] = [];
   types: OType[] = [];
@@ -310,7 +315,7 @@ export abstract class OVariableBase extends OMentionable {
 export abstract class OSignalBase extends OVariableBase {
   private register: boolean | null = null;
   private registerProcess: OProcess | null;
-  constructor(public parent: OArchitecture | OEntity | OPackage | OProcess | OForLoop, startI: number, endI: number) {
+  constructor(public parent: OArchitecture | OEntity | OPackage | OProcess | OForLoop | OProcedure, startI: number, endI: number) {
     super(parent, startI, endI);
   }
   isRegister(): boolean {
@@ -469,10 +474,14 @@ export class OGenericActual extends OVariableBase {
   reads: ORead[];
 }
 export type OGeneric = OGenericType | OGenericActual;
-export type OStatement = OCase | OAssignment | OIf | OForLoop;
+export type OStatement = OCase | OAssignment | OIf | OForLoop | OWhileLoop;
 export class OIf extends ObjectBase {
   clauses: OIfClause[] = [];
   else?: OElseClause;
+}
+export class OWhileLoop extends ObjectBase {
+  conditionReads: ORead[];
+  statements: OStatement[] = [];
 }
 export class OElseClause extends ObjectBase {
   statements: OStatement[] = [];

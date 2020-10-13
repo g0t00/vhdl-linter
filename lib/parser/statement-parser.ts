@@ -1,5 +1,5 @@
 import { ParserBase } from './parser-base';
-import { OI, OEntity, OArchitecture, OProcedureInstantiation, OForGenerate, ParserError, ORead, OIfGenerateClause, OIfGenerate } from './objects';
+import { OI, OEntity, OArchitecture, OProcedureInstantiation, OForGenerate, ParserError, ORead, OIfGenerateClause, OIfGenerate, OProcedure } from './objects';
 import { ProcessParser } from './process-parser';
 import { AssignmentParser } from './assignment-parser';
 import { InstantiationParser } from './instantiation-parser';

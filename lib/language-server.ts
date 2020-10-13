@@ -183,7 +183,7 @@ const findDefinition = async (params: IFindDefinitionParams) => {
   }
 
   let startI = linter.getIFromPosition(params.position);
-  const candidates = linter.tree.objectList.filter(object => object.range.start.i <= startI && startI <= object.range.end.i);
+  const candidates = linter.tree?.objectList.filter(object => object.range.start.i <= startI && startI <= object.range.end.i) ?? [];
   candidates.sort((a, b) => (a.range.end.i - a.range.start.i) - (b.range.end.i - b.range.start.i));
   let candidate = candidates[0];
   if (!candidate) {
