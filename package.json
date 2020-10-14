@@ -2,7 +2,7 @@
 	"name": "vhdl-linter",
 	"publisher": "g0t00",
 	"main": "./dist/lib/vscode.js",
-	"version": "0.13.2",
+	"version": "0.14.0",
 	"description": "A typescript based linter for vhdl",
 	"keywords": [],
 	"repository": "https://github.com/g0t00/vhdl-linter",
@@ -11,6 +11,35 @@
 		"vscode": "^1.39.0"
 	},
 	"contributes": {
+		"languages": [
+			{
+				"id": "vhdl",
+				"aliases": [
+					"VHDL",
+					"vhdl"
+				],
+				"extensions": [
+					".vhd",
+					".vhdl",
+					".vho",
+					".vht"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "vhdl",
+				"scopeName": "source.vhdl",
+				"path": "./syntaxes/vhdl.tmLanguage"
+			}
+		],
+		"snippets": [
+			{
+				"language": "vhdl",
+				"path": "./snippets/snippets.json"
+			}
+		],
 		"keybindings": [
 			{
 				"key": "ctrl+shift+c ctrl+shift+s",

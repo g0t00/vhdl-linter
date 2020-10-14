@@ -46,7 +46,9 @@ export class StatementParser extends ParserBase {
       const subarchitecture = new ArchitectureParser(this.text, this.pos, this.file, (this.parent as OArchitecture), label);
       const generate: OForGenerate = subarchitecture.parse(true, 'generate', { variable, start, end, startPosI: startI });
       generate.range.start.i = savedI;
+      this.reverseWhitespace();
       generate.range.end.i = this.pos.i;
+      this.advanceWhitespace();
       //        console.log(generate, generate.constructor.name);
       (this.parent as OArchitecture).statements.push(generate);
     } else if (nextWord === 'if' && allowedStatements.includes(StatementTypes.Generate)) {
@@ -67,7 +69,10 @@ export class StatementParser extends ParserBase {
       }
       ifGenerate.ifGenerates.push(ifGenerateClause);
       (this.parent as OArchitecture).statements.push(ifGenerate);
+      this.reverseWhitespace();
       ifGenerate.range.end.i = this.pos.i;
+      ifGenerateClause.range.end.i = this.pos.i;
+      this.advanceWhitespace();
     } else if (nextWord === 'elsif' && allowedStatements.includes(StatementTypes.Generate)) {
       if (!(this.parent instanceof OIfGenerateClause)) {
         throw new ParserError('elsif generate without if generate', this.pos.getRangeToEndLine());
@@ -108,8 +113,9 @@ export class StatementParser extends ParserBase {
 
       const ifGenerateObject = subarchitecture.parse(true, 'generate');
       ifGenerateObject.range.start.i = savedI;
-      ifGenerateObject.range.end.line = this.pos.line - 1;
-      ifGenerateObject.range.end.character = 999;
+      this.reverseWhitespace();
+      ifGenerateObject.range.end.i = this.pos.i;
+      this.advanceWhitespace();
       this.parent.parent.elseGenerate = ifGenerateObject;
       return true;
 
