@@ -21,16 +21,13 @@ export class ProjectParser {
     // for (const directory of this.workspaces) {
     //   this.parseDirectory(directory).forEach(file => files.add(realpathSync(file)));
     // }
-    debugger;
     const pkg = __dirname;
-    console.log(pkg);
     if (pkg) {
       //       console.log(pkg, new Directory(pkg + '/ieee2008'));
       (await this.parseDirectory(join(pkg, '/../../ieee2008'))).forEach(file => files.add(file));
       files.add(join(pkg, '/../../standard.vhdl'));
       files.add(join(pkg, '/../../textio.vhdl'));
     }
-    console.log(files);
     for (const file of files) {
       let cachedFile = new OFileCache(file, this);
       this.cachedFiles.push(cachedFile);
@@ -49,7 +46,7 @@ export class ProjectParser {
         if (cachedFile) {
           cachedFile.reparse();
         } else {
-          console.error('modified file not found', event);
+          console.error('modified file not found', path);
         }
         this.fetchEntitesAndPackages();
         this.events.emit('change', 'change', path);

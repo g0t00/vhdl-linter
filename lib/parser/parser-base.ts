@@ -1,7 +1,8 @@
 import * as escapeStringRegexp from 'escape-string-regexp';
-import { ParserError, OWrite, ORead, OI, OElementRead, ObjectBase, OMappingName, OMapping } from './objects';
+import { ParserError, OWrite, ORead, OI, OElementRead, ObjectBase, OMappingName, OMapping, OGenericActual, OGenericType, OIRange, OName, OPort, OGeneric } from './objects';
 import { config } from './config';
 import { tokenizer } from './tokenizer';
+import { TextEdit } from 'vscode-languageserver';
 
 
 export class ParserBase {
@@ -37,6 +38,144 @@ export class ParserBase {
     // };
     // target = filter(object);
     //     console.log(`${this.constructor.name}: ${JSON.stringify(target, null, 2)} in line: ${this.getLine()}, (${this.file})`);
+  }
+  parsePortsAndGenerics(generics: false, entity: any): OPort[];
+  parsePortsAndGenerics(generics: true, entity: any): OGeneric[];
+  parsePortsAndGenerics(generics: false | true, entity: any) {
+    this.debug('start ports');
+    this.expect('(');
+    const ports = [];
+    // let multiPorts: string[] = [];
+    while (this.pos.i < this.text.length) {
+      this.advanceWhitespace();
+      let port = generics ?
+        new OGenericActual(entity, this.pos.i, this.getEndOfLineI()) :
+        new OPort(entity, this.pos.i, this.getEndOfLineI());
+
+      if (this.text[this.pos.i] === ')') {
+        this.pos.i++;
+        this.advanceWhitespace();
+        break;
+      }
+      if (this.getNextWord({ consume: false }).toLowerCase() === 'type') {
+        this.getNextWord();
+        port = Object.setPrototypeOf(port, OGenericType.prototype);
+        port.name = new OName(port, this.pos.i, this.pos.i);
+        port.name.text = this.getNextWord();
+        port.name.range.end.i = port.name.range.start.i + port.name.text.length;
+        if (generics) {
+          ports.push(port);
+        } else {
+          ports.push(port as any);
+        }
+        if (this.text[this.pos.i] === ';') {
+          this.pos.i++;
+          this.advanceWhitespace();
+        }
+      } else {
+        if (this.getNextWord({ consume: false }).toLowerCase() === 'signal' || this.getNextWord({ consume: false }).toLowerCase() === 'file') {
+          this.getNextWord();
+        }
+        port.name = new OName(port, this.pos.i, this.pos.i);
+        port.name.text = this.getNextWord();
+        port.name.range.end.i = port.name.range.start.i + port.name.text.length;
+        if (this.text[this.pos.i] === ',') {
+          this.expect(',');
+          // multiPorts.push(port.name);
+          continue;
+        }
+        this.expect(':');
+        let directionString;
+        if (port instanceof OPort) {
+          directionString = this.getNextWord({ consume: false });
+          if (directionString !== 'in' && directionString !== 'out' && directionString !== 'inout') {
+            port.direction = 'inout';
+            port.directionRange = new OIRange(port, this.pos.i, this.pos.i);
+          } else {
+            port.direction = directionString;
+            port.directionRange = new OIRange(port, this.pos.i, this.pos.i + directionString.length);
+            this.getNextWord(); // consume direction
+          }
+        }
+        const iBeforeType = this.pos.i;
+        const { type, defaultValue, endI } = this.getTypeDefintion(port);
+        port.range.end.i = endI;
+        // port.type = type;
+        port.type = this.extractReads(port, type, iBeforeType);
+
+        port.defaultValue = defaultValue;
+        if (generics) {
+          ports.push(port);
+        } else {
+          ports.push(port as any);
+        }
+        // for (const multiPortName of multiPorts) {
+        //   const multiPort = new OPort(this.parent, -1);
+        //   Object.assign(port, multiPort);
+        //   multiPort.name = multiPortName;
+        //   ports.push(multiPort);
+        // }
+        // multiPorts = [];
+      }
+    }
+    return ports;
+  }
+  getTypeDefintion(parent: OGenericActual | OPort) {
+    let type = '';
+    let braceLevel = 0;
+    while (this.text[this.pos.i].match(/[^);:]/) || braceLevel > 0) {
+      type += this.text[this.pos.i];
+      if (this.text[this.pos.i] === '(') {
+        braceLevel++;
+      } else if (this.text[this.pos.i] === ')') {
+        braceLevel--;
+      }
+      this.pos.i++;
+    }
+    let defaultValue = '';
+    const startI = this.pos.i + 2;
+    if (this.text[this.pos.i] === ':') {
+      this.pos.i += 2;
+      while (this.text[this.pos.i].match(/[^);]/) || braceLevel > 0) {
+
+        defaultValue += this.text[this.pos.i];
+        if (this.text[this.pos.i] === '(') {
+          braceLevel++;
+        } else if (this.text[this.pos.i] === ')') {
+          braceLevel--;
+        }
+        this.pos.i++;
+      }
+    }
+    this.reverseWhitespace();
+    const endI = this.pos.i;
+    this.advanceWhitespace();
+    if (this.text[this.pos.i] === ';') {
+      const startI = this.pos.i;
+      this.pos.i++;
+      this.advanceWhitespace();
+      if (this.text[this.pos.i] === ')') {
+        const range = new OIRange(parent, startI, startI + 1);
+        range.start.character = 0;
+        throw new ParserError(`Unexpected ';' at end of port list`, range, {
+          message: `Remove ';'`,
+          edits: [TextEdit.del(new OIRange(parent, startI, startI + 1))]
+        });
+      }
+    }
+    defaultValue = defaultValue.trim();
+    if (defaultValue === '') {
+      return {
+        type: type.trim(),
+        endI
+      };
+
+    }
+    return {
+      type: type.trim(),
+      defaultValue: this.extractReads(parent, defaultValue, startI),
+      endI
+    };
   }
   message(message: string, severity = 'error') {
     if (severity === 'error') {
@@ -252,7 +391,7 @@ export class ParserBase {
       savedI = this.pos.i;
       this.advanceWhitespace();
     } else {
-      throw new ParserError(`expected '${expected.join(', ')}' found '${this.getNextWord()}' line: ${this.getLine()}`, this.pos.getRangeToEndLine());
+      throw new ParserError(`expected '${expected.join(', ')}' found '${this.getNextWord({re: /^\S+/})}' line: ${this.getLine()}`, this.pos.getRangeToEndLine());
     }
     return savedI;
   }

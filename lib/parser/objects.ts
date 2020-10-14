@@ -176,6 +176,7 @@ export class OFileWithPackage extends OFile {
 export class OPackage extends ObjectBase {
   name: string;
   functions: OFunction[] = [];
+  procedures: OProcedure[] = [];
   constants: OSignal[] = [];
   types: OType[] = [];
   parent: OFile;
@@ -193,13 +194,15 @@ export class OFunction extends OMentionable {
 export class OProcedure extends OFunction {
   variables: OVariable[] = [];
   statements: OStatement[] = [];
+  ports: OPort[] = [];
 
 }
 export class OArchitecture extends ObjectBase {
   signals: OSignal[] = [];
   types: OType[] = [];
   functions: OFunction[] = [];
-  procedures: OProcedureInstantiation[] = [];
+  procedureInstantiations: OProcedureInstantiation[] = [];
+  procedures: OProcedure[] = [];
 
   statements: (OProcess | OInstantiation | OForGenerate | OIfGenerate | OAssignment | OProcedureInstantiation)[] = [];
   get processes() {
@@ -216,7 +219,7 @@ export class OArchitecture extends ObjectBase {
         generates.push(ifObj.elseGenerate);
       }
     }
-    return generates as readonly(OArchitecture)[];
+    return generates as readonly (OArchitecture)[];
   }
   get assignments() {
     return this.statements.filter(statement => statement instanceof OAssignment) as readonly OAssignment[];
@@ -355,13 +358,17 @@ export class OSignal extends OSignalBase {
 }
 export class OMap extends ObjectBase {
   public children: OMapping[] = [];
+
+}
+export class OGenericMap extends OMap {
   constructor(public parent: OInstantiation, startI: number, endI: number) {
     super(parent, startI, endI);
   }
 }
-export class OGenericMap extends OMap {
-}
 export class OPortMap extends OMap {
+  constructor(public parent: OInstantiation, startI: number, endI: number) {
+    super(parent, startI, endI);
+  }
 }
 export class OInstantiation extends ODefitionable {
   label?: string;
@@ -436,6 +443,16 @@ export class OInstantiation extends ODefitionable {
     return this.flatWrites;
   }
 }
+export class OProcedureCallPortMap extends OMap {
+  constructor(public parent: OProcedureCall, startI: number, endI: number) {
+    super(parent, startI, endI);
+  }
+}
+export class OProcedureCall extends ODefitionable {
+  procedureName: OName;
+  definition?: OProcedure;
+  portMap?: OProcedureCallPortMap;
+}
 export class OMapping extends ODefitionable {
   constructor(public parent: OMap, startI: number, endI: number) {
     super(parent, startI, endI);
@@ -455,6 +472,7 @@ export class OEntity extends ObjectBase {
   generics: OGeneric[] = [];
   signals: OSignal[] = [];
   functions: OFunction[] = [];
+  procedures: OProcedure[] = [];
   types: OType[] = [];
   statements: (OProcess | OAssignment | OProcedureInstantiation)[] = [];
 
@@ -474,7 +492,7 @@ export class OGenericActual extends OVariableBase {
   reads: ORead[];
 }
 export type OGeneric = OGenericType | OGenericActual;
-export type OStatement = OCase | OAssignment | OIf | OForLoop | OWhileLoop;
+export type OStatement = OCase | OAssignment | OIf | OForLoop | OWhileLoop | OProcedureCall;
 export class OIf extends ObjectBase {
   clauses: OIfClause[] = [];
   else?: OElseClause;
@@ -543,8 +561,10 @@ export class OProcess extends ObjectBase {
           for (const whenClause of object.whenClauses) {
             flatWrites.push(...flatten(whenClause.statements));
           }
-        } else if (object instanceof OForLoop) {
+        } else if (object instanceof OForLoop || object instanceof OWhileLoop) {
           flatWrites.push(...flatten(object.statements));
+        } else if (object instanceof OProcedureCall) {
+          // TODO
         } else {
           throw new Error('UUPS');
         }
@@ -582,6 +602,11 @@ export class OProcess extends ObjectBase {
           }
         } else if (object instanceof OForLoop) {
           flatReads.push(...flatten(object.statements));
+        } else if (object instanceof OWhileLoop) {
+          flatReads.push(...flatten(object.statements));
+          flatReads.push(...object.conditionReads);
+        } else if (object instanceof OProcedureCall) {
+          // TODO
         } else {
           throw new Error('UUPS');
         }
@@ -634,9 +659,12 @@ export class OAssignment extends ObjectBase {
 }
 
 export class OToken extends ODefitionable {
-  public scope?: OArchitecture | OProcess | OEntity | OForLoop;
+  public scope?: OArchitecture | OProcess | OEntity | OForLoop | OProcedure;
   constructor(public parent: ObjectBase, startI: number, endI: number, public text: string) {
     super(parent, startI, endI);
+    if (this.text === 'i_PIOWaitReq') {
+      // debugger;
+    }
     let object: (OFile | ObjectBase) = this;
 
     yank: do {
@@ -746,6 +774,25 @@ export class OToken extends ODefitionable {
             this.definition = variable;
             this.scope = object;
             variable.mentions.push(this);
+
+            break yank;
+          }
+        }
+      } else if (object instanceof OProcedure) {
+        for (const variable of object.variables) {
+          if (variable.name.text.toLowerCase() === text.toLowerCase()) {
+            this.definition = variable;
+            this.scope = object;
+            variable.mentions.push(this);
+
+            break yank;
+          }
+        }
+        for (const port of object.ports) {
+          if (port.name.text.toLowerCase() === text.toLowerCase()) {
+            this.definition = port;
+            this.scope = object;
+            port.mentions.push(this);
 
             break yank;
           }

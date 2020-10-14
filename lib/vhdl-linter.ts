@@ -1,4 +1,4 @@
-import { OFile, OIf, OSignalBase, OSignal, OArchitecture, OEntity, OPort, OInstantiation, OWrite, ORead, OFileWithEntity, OFileWithPackage, OFileWithEntityAndArchitecture, ORecord, OPackage, ParserError, OEnum, OGenericActual, OMapping, OPortMap, MagicCommentType, OProcess, OToken, OMappingName, OMap, OMentionable } from './parser/objects';
+import { OFile, OIf, OSignalBase, OSignal, OArchitecture, OEntity, OPort, OInstantiation, OWrite, ORead, OFileWithEntity, OFileWithPackage, OFileWithEntityAndArchitecture, ORecord, OPackage, ParserError, OEnum, OGenericActual, OMapping, OPortMap, MagicCommentType, OProcess, OToken, OMappingName, OMap, OMentionable, OGenericMap, OProcedureCall } from './parser/objects';
 import { Parser } from './parser/parser';
 import { ProjectParser } from './project-parser';
 import { findBestMatch } from 'string-similarity';
@@ -182,11 +182,11 @@ export class VhdlLinter {
       }
     }
     for (const instantiation of this.tree.objectList.filter(object => object instanceof OInstantiation && typeof object.definition === 'undefined') as OInstantiation[]) {
-        instantiation.definition = this.getProjectEntity(instantiation);
+      instantiation.definition = this.getProjectEntity(instantiation);
     }
     for (const obj of this.tree.objectList) {
       if (obj instanceof OMapping) {
-        if (obj.parent instanceof OMap) {
+        if (obj.parent instanceof OGenericMap || obj.parent instanceof OPortMap) {
           const entity = this.getProjectEntity(obj.parent.parent);
           if (!entity) {
             continue;
@@ -257,6 +257,7 @@ export class VhdlLinter {
         this.checkDoubles();
         this.checkPortDeclaration();
         this.checkInstantiations(this.tree.architecture);
+        this.checkProcedures(this.tree.architecture);
       }
       // this.parser.debugObject(this.tree);
     }
@@ -765,7 +766,73 @@ export class VhdlLinter {
       this.checkInstantiations(generate);
     }
   }
+  checkProcedures(architecture: OArchitecture) {
+    if (!architecture) {
+      return;
+    }
+    for (const obj of architecture.getRoot().objectList) {
+      if (obj instanceof OProcedureCall) {
+        let searchObj = obj.parent;
+        while (!(searchObj instanceof OFile)) {
+          if (searchObj instanceof OArchitecture) {
+            for (const procedureSearch of searchObj.procedures) {
+              if (procedureSearch.name.text === obj.procedureName.text) {
+                obj.definition = procedureSearch;
+                break;
+              }
+            }
+          }
+          searchObj = searchObj.parent;
+        }
+        if (!obj.definition) {
+          this.addMessage({
+            range: obj.procedureName.range,
+            severity: DiagnosticSeverity.Error,
+            message: `procedure '${obj.procedureName.text}' is not declared`
+          });
 
+        } else {
+          if (obj.portMap) {
+            for (const [index, portMapping] of obj.portMap.children.entries()) {
+              if (obj.definition.ports.length - 1 < index) {
+                this.addMessage({
+                  range: portMapping.range,
+                  severity: DiagnosticSeverity.Error,
+                  message: `Too many Ports in Procedure Instantiation`
+                });
+              } else {
+                if (obj.definition.ports[index].direction === 'in') {
+
+                  for (const mapping of portMapping.mappingIfOutput.flat()) {
+                    const index = this.tree.objectList.indexOf(mapping);
+                    this.tree.objectList.splice(index, 1);
+                    for (const mentionable of this.tree.objectList.filter(object => object instanceof OMentionable) as OMentionable[]) {
+                      for (const [index, mention] of mentionable.mentions.entries()) {
+                        if (mention === mapping) {
+                          mentionable.mentions.splice(index, 1);
+                        }
+                      }
+                    }
+                  }
+                  portMapping.mappingIfOutput = [[], []];
+                }
+              }
+            }
+          }
+          // for (const port of entity.ports) {
+          //   if (port.direction === 'in' && typeof port.defaultValue === 'undefined' && typeof foundPorts.find(portSearch => portSearch === port) === 'undefined') {
+          //     this.addMessage({
+          //       range: instantiation.range,
+          //       severity: DiagnosticSeverity.Error,
+          //       message: `input port ${port.name} is missing in port map and has no default value on entity ${instantiation.componentName}`
+          //     });
+          //   }
+          // }
+
+        }
+      }
+    }
+  }
   getIFromPosition(p: Position): number {
     let text = this.text.split('\n').slice(0, p.line);
     let i = text.join('\n').length + p.character;

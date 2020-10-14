@@ -146,7 +146,7 @@ export class DeclarativePartParser extends ParserBase {
       } else if (nextWord === 'procedure') {
         this.getNextWord();
         const procedureParser = new ProcedureParser(this.text, this.pos, this.file, this.parent);
-        this.parent.functions.push(procedureParser.parse(this.pos.i));
+        this.parent.procedures.push(procedureParser.parse(this.pos.i));
       } else if (nextWord === 'impure' || nextWord === 'function') {
         if (nextWord === 'impure') {
           this.getNextWord();
